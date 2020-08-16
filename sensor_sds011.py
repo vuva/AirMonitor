@@ -16,7 +16,8 @@ MODE_ACTIVE = 0
 MODE_QUERY = 1
 PERIOD_CONTINUOUS = 0
 
-WAKE_UP_DELAY = 30
+WAKE_UP_DELAY = 20
+SAMPLING_ITI = 15
 
 JSON_FILE = '/var/www/html/aqi.json'
 
@@ -119,7 +120,7 @@ def get_sensor_data():
     cmd_set_sleep(0)
     print("Wait a while for the sensor to wake up ...")
     time.sleep(WAKE_UP_DELAY)
-    for t in range(15):
+    for t in range(SAMPLING_ITI):
         values = cmd_query_data();
         if values is not None and len(values) == 2:
             print("PM2.5: ", values[0], ", PM10: ", values[1])

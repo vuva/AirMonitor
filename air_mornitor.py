@@ -11,6 +11,7 @@ from PIL import ImageFont
 
 import subprocess
 
+import aqi
 import sensor_bme280 as BME280_SENSOR
 import sensor_sds011 as SDS011_SENSOR
 
@@ -87,7 +88,7 @@ x = 0
 # Some other nice fonts to try: http://www.dafont.com/bitmap.php
 header_font = ImageFont.truetype('fonts/Minecraftia-Regular.ttf',8)
 main_font = ImageFont.truetype('fonts/C&C Red Alert [INET].ttf',16)
-footer_font = ImageFont.truetype('fonts/PIXELADE.TTF',8)
+footer_font = ImageFont.truetype('fonts/PIXEARG_.TTF',8)
 
 status="V"
 temperature = -271.13
@@ -97,17 +98,40 @@ aqi_index = -1
 
 while True:
 
-    # Draw a black filled box to clear the image.
-    draw.rectangle((0,0,width,height), outline=0, fill=0)
-
     # Get temp, humis, and air pressure data
+    bme280_data = BME280_SENSOR.get_sensor_data()
+    if (bme280_data):
+        temperature = bme280_data.temperature
+        humidity = bme280_data.humidity
+        air_pressure = bme280_data.pressure
+    else:
+        status = "X"
 
+    # Get PM2.5 and PM10 data
+    sds011_data = SDS011_SENSOR.get_sensor_data()
+    if (sds011_data[0] and sds011_data[1]):
+        aqi_index = aqi.to_aqi([
+            (aqi.POLLUTANT_PM25, sds011_data[0]),
+            (aqi.POLLUTANT_PM10, sds011_data[1])
+        ])
+    else:
+        status = "X"
 
-    # Write two lines of text.
+    # Draw a black filled box to clear the image.
+    draw.rectangle((0, 0, width, height), outline=0, fill=0)
+
     draw.text((x, top),    "Temp" + u'\u00B0' +"C"   ,  font=header_font, fill=255)
-    draw.text((x, top),  "Humid%" ,  font=header_font, fill=255)
-    draw.text((x, top), "AQI", font=header_font, fill=255)
-    draw.text((x, top), status , font=header_font, fill=255)
+    draw.text((x+42, top),  "Humid%" ,  font=header_font, fill=255)
+    draw.text((x+84, top), "AQI", font=header_font, fill=255)
+    draw.text((x+120, top), status , font=header_font, fill=255)
+
+    draw.text((x, top + 9), "{:.1f}".format(temperature), font=main_font, fill=255)
+    draw.text((x + 42, top + 9), "{:.1f}".format(humidity), font=main_font, fill=255)
+    draw.text((x + 84, top + 9), "{:.0f}".format(aqi_index), font=main_font, fill=255)
+
+    draw.text((x, top+ 23), "{:.0f}-{:.0f}".format(temperature,temperature), font=footer_font, fill=255)
+    draw.text((x + 42, top + 23), "{:.0f}-{:.0f}".format(humidity,humidity), font=footer_font, fill=255)
+    draw.text((x + 84, top + 23), "{:.0f}-{:.0f}".format(aqi_index,aqi_index), font=footer_font, fill=255)
 
 
 
