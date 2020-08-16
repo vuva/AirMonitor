@@ -23,7 +23,8 @@ def get_sensor_data():
 
         # there is a handy string representation too
         print(data)
+        return data
     except Exception as error:
         print('Caught this error: ' + repr(error))
 
-    return data
+    return None

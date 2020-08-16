@@ -11,11 +11,14 @@ from PIL import ImageFont
 
 import subprocess
 
+import sqlite3 as sl
+import datetime
+import math
 import aqi
 import sensor_bme280 as BME280_SENSOR
 import sensor_sds011 as SDS011_SENSOR
 
-SAMPLING_INTERVAL = 120 - 70
+SAMPLING_INTERVAL = 120 - 40
 # Raspberry Pi pin configuration:
 RST = 25     # on the PiOLED this pin isnt used
 # Note the following are only used with SPI:
@@ -90,11 +93,32 @@ header_font = ImageFont.truetype('fonts/Minecraftia-Regular.ttf',8)
 main_font = ImageFont.truetype('fonts/C&C Red Alert [INET].ttf',16)
 footer_font = ImageFont.truetype('fonts/PIXEARG_.TTF',8)
 
+# Database
+try:
+    con = sl.connect('air-monitor.db')
+    cursorObj = con.cursor()
+    cursorObj.execute(
+        "CREATE TABLE air_info(id integer PRIMARY KEY, timestamp DATETIME, temperature FLOAT, humidity FLOAT, air_pressure FLOAT,pm25 FLOAT,pm10 FLOAT,aqi_index integer)")
+except Exception as error:
+    print("Create table " + str(error))
+
+
+
 status="V"
 temperature = -271.13
 humidity = 0
 air_pressure = 0
 aqi_index = -1
+
+low_temperature = -271.13
+low_humidity = 0
+low_air_pressure = 0
+low_aqi_index = -1
+
+high_temperature = -271.13
+high_humidity = 0
+high_air_pressure = 0
+high_aqi_index = -1
 
 while True:
 
@@ -117,21 +141,56 @@ while True:
     else:
         status = "X"
 
+    if status != "X":
+        try:
+            sqlite_insert_with_param = """INSERT INTO 'air_info'
+                                      ('timestamp', 'temperature', 'humidity', 'air_pressure','pm25','pm10','aqi_index') 
+                                      VALUES (?, ?, ?, ? ,? ,? ,?);"""
+
+            data_tuple = (datetime.datetime.now(),temperature, humidity, air_pressure, sds011_data[0], sds011_data[1], int(aqi_index))
+            cursorObj.execute(sqlite_insert_with_param, data_tuple)
+            con.commit()
+            print("Data added successfully \n")
+        except Exception as error:
+            print("Insert " + str(error))
+
+    # Get history data
+    try:
+        sqlite_select_query = """SELECT MIN(temperature), MIN(humidity),MIN(aqi_index) from air_info order by id desc limit ?"""
+        cursorObj.execute(sqlite_select_query, (300,))
+        records = cursorObj.fetchall()
+    
+        for row in records:
+            low_temperature = row[0]
+            low_humidity = row[1]
+            low_aqi_index= row[2]
+    
+        sqlite_select_query = """SELECT temperature, humidity,aqi_index from air_info order by id desc limit ?"""
+        cursorObj.execute(sqlite_select_query, (300,))
+        records = cursorObj.fetchall()
+    
+        for row in records:
+            high_temperature = row[0]
+            high_humidity = row[1]
+            high_aqi_index = row[2]
+    except Exception as error:
+        print("Query " + str(error))
+
     # Draw a black filled box to clear the image.
     draw.rectangle((0, 0, width, height), outline=0, fill=0)
 
     draw.text((x, top),    "Temp" + u'\u00B0' +"C"   ,  font=header_font, fill=255)
-    draw.text((x+42, top),  "Humid%" ,  font=header_font, fill=255)
-    draw.text((x+84, top), "AQI", font=header_font, fill=255)
+    draw.text((x+44, top),  "Humid%" ,  font=header_font, fill=255)
+    draw.text((x+88, top), "AQI", font=header_font, fill=255)
     draw.text((x+120, top), status , font=header_font, fill=255)
 
     draw.text((x, top + 9), "{:.1f}".format(temperature), font=main_font, fill=255)
-    draw.text((x + 42, top + 9), "{:.1f}".format(humidity), font=main_font, fill=255)
-    draw.text((x + 84, top + 9), "{:.0f}".format(aqi_index), font=main_font, fill=255)
+    draw.text((x + 44, top + 9), "{:.1f}".format(humidity), font=main_font, fill=255)
+    draw.text((x + 88, top + 9), "{:.0f}".format(aqi_index), font=main_font, fill=255)
 
-    draw.text((x, top+ 23), "{:.0f}-{:.0f}".format(temperature,temperature), font=footer_font, fill=255)
-    draw.text((x + 42, top + 23), "{:.0f}-{:.0f}".format(humidity,humidity), font=footer_font, fill=255)
-    draw.text((x + 84, top + 23), "{:.0f}-{:.0f}".format(aqi_index,aqi_index), font=footer_font, fill=255)
+    draw.text((x, top+ 23), "{:.0f}-{:.0f}".format(math.floor(low_temperature),math.ceil(high_temperature)), font=footer_font, fill=255)
+    draw.text((x + 44, top + 23), "{:.0f}-{:.0f}".format(math.floor(low_humidity),math.ceil(high_humidity)), font=footer_font, fill=255)
+    draw.text((x + 88, top + 23), "{:.0f}-{:.0f}".format(math.floor(low_aqi_index),math.ceil(high_aqi_index)), font=footer_font, fill=255)
 
 
 
@@ -139,3 +198,6 @@ while True:
     disp.image(image)
     disp.display()
     time.sleep(SAMPLING_INTERVAL)
+
+cursorObj.close()
+con.close()
