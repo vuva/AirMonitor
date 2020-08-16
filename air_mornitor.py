@@ -19,6 +19,8 @@ import sensor_bme280 as BME280_SENSOR
 import sensor_sds011 as SDS011_SENSOR
 
 SAMPLING_INTERVAL = 120 - 40
+HISTORY_THRESHOLD = 6
+
 # Raspberry Pi pin configuration:
 RST = 25     # on the PiOLED this pin isnt used
 # Note the following are only used with SPI:
@@ -98,7 +100,7 @@ try:
     con = sl.connect('air-monitor.db')
     cursorObj = con.cursor()
     cursorObj.execute(
-        "CREATE TABLE air_info(id integer PRIMARY KEY, timestamp DATETIME, temperature FLOAT, humidity FLOAT, air_pressure FLOAT,pm25 FLOAT,pm10 FLOAT,aqi_index integer)")
+        "CREATE TABLE air_info(id integer PRIMARY KEY, timestamp datetime, temperature FLOAT, humidity FLOAT, air_pressure FLOAT,pm25 FLOAT,pm10 FLOAT,aqi_index integer)")
 except Exception as error:
     print("Create table " + str(error))
 
@@ -141,13 +143,14 @@ while True:
     else:
         status = "X"
 
+    now=datetime.datetime.now()
     if status != "X":
         try:
             sqlite_insert_with_param = """INSERT INTO 'air_info'
                                       ('timestamp', 'temperature', 'humidity', 'air_pressure','pm25','pm10','aqi_index') 
                                       VALUES (?, ?, ?, ? ,? ,? ,?);"""
 
-            data_tuple = (datetime.datetime.now(),temperature, humidity, air_pressure, sds011_data[0], sds011_data[1], int(aqi_index))
+            data_tuple = (now,temperature, humidity, air_pressure, sds011_data[0], sds011_data[1], int(aqi_index))
             cursorObj.execute(sqlite_insert_with_param, data_tuple)
             con.commit()
             print("Data added successfully \n")
@@ -156,23 +159,26 @@ while True:
 
     # Get history data
     try:
-        sqlite_select_query = """SELECT MIN(temperature), MIN(humidity),MIN(aqi_index) from air_info order by id desc limit ?"""
-        cursorObj.execute(sqlite_select_query, (300,))
+        sqlite_select_query = """SELECT MIN(temperature), MIN(humidity),MIN(aqi_index) from air_info where timestamp> ?"""
+        cursorObj.execute(sqlite_select_query, (now - datetime.timedelta(hours=HISTORY_THRESHOLD),))
         records = cursorObj.fetchall()
-    
+
         for row in records:
             low_temperature = row[0]
             low_humidity = row[1]
             low_aqi_index= row[2]
-    
-        sqlite_select_query = """SELECT MAX(temperature), MAX(humidity), MAX(aqi_index) from air_info order by id desc limit ?"""
-        cursorObj.execute(sqlite_select_query, (300,))
+        print("MIN: ", low_temperature, low_humidity, low_aqi_index)
+
+        sqlite_select_query = """SELECT MAX(temperature), MAX(humidity), MAX(aqi_index) from air_info where timestamp> ?"""
+        cursorObj.execute(sqlite_select_query, (now - datetime.timedelta(hours=HISTORY_THRESHOLD),))
         records = cursorObj.fetchall()
     
         for row in records:
             high_temperature = row[0]
             high_humidity = row[1]
             high_aqi_index = row[2]
+
+        print("MAX: ", high_temperature, high_humidity, high_aqi_index)
     except Exception as error:
         print("Query " + str(error))
 
