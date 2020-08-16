@@ -11,7 +11,10 @@ from PIL import ImageFont
 
 import subprocess
 
-GPIO.setmode(GPIO.BCM)
+import sensor_bme280 as BME280_SENSOR
+import sensor_sds011 as SDS011_SENSOR
+
+SAMPLING_INTERVAL = 120 - 70
 # Raspberry Pi pin configuration:
 RST = 25     # on the PiOLED this pin isnt used
 # Note the following are only used with SPI:
@@ -82,28 +85,33 @@ x = 0
 
 # Alternatively load a TTF font.  Make sure the .ttf font file is in the same directory as the python script!
 # Some other nice fonts to try: http://www.dafont.com/bitmap.php
-font = ImageFont.truetype('04B_08__.TTF',16)
+header_font = ImageFont.truetype('fonts/Minecraftia-Regular.ttf',8)
+main_font = ImageFont.truetype('fonts/C&C Red Alert [INET].ttf',16)
+footer_font = ImageFont.truetype('fonts/PIXELADE.TTF',8)
+
+status="V"
+temperature = -271.13
+humidity = 0
+air_pressure = 0
+aqi_index = -1
 
 while True:
 
     # Draw a black filled box to clear the image.
     draw.rectangle((0,0,width,height), outline=0, fill=0)
 
-    # Shell scripts for system monitoring from here : https://unix.stackexchange.com/questions/119126/command-to-display-memory-usage-disk-usage-and-cpu-load
-    cmd = "hostname -I | cut -d\' \' -f1"
-    IP = subprocess.check_output(cmd, shell = True )
-    cmd = "top -bn1 | grep load | awk '{printf \"CPU Load: %.2f\", $(NF-2)}'"
-    CPU = subprocess.check_output(cmd, shell = True )
-    cmd = "free -m | awk 'NR==2{printf \"Mem: %s/%sMB %.2f%%\", $3,$2,$3*100/$2 }'"
-    MemUsage = subprocess.check_output(cmd, shell = True )
-    cmd = "df -h | awk '$NF==\"/\"{printf \"Disk: %d/%dGB %s\", $3,$2,$5}'"
-    Disk = subprocess.check_output(cmd, shell = True )
+    # Get temp, humis, and air pressure data
+
 
     # Write two lines of text.
-    draw.text((x, top),    "Bo Yeu Hang"   ,  font=font, fill=255)
-    draw.text((x, top+16),  "Bo Yeu Ly" ,  font=font, fill=255)
+    draw.text((x, top),    "Temp" + u'\u00B0' +"C"   ,  font=header_font, fill=255)
+    draw.text((x, top),  "Humid%" ,  font=header_font, fill=255)
+    draw.text((x, top), "AQI", font=header_font, fill=255)
+    draw.text((x, top), status , font=header_font, fill=255)
+
+
 
     # Display image.
     disp.image(image)
     disp.display()
-    time.sleep(10)
+    time.sleep(SAMPLING_INTERVAL)

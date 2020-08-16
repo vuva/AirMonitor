@@ -1,172 +1,172 @@
-"""This module provides an abstraction for the SDS011 air partuclate densiry sensor.
-"""
-import struct
-import serial
+#!/usr/bin/python -u
+# coding=utf-8
+# "DATASHEET": http://cl.ly/ekot
+# https://gist.github.com/kadamski/92653913a53baf9dd1a8
+from __future__ import print_function
+import serial, struct, sys, time, json, subprocess
 
+DEBUG = 0
+CMD_MODE = 2
+CMD_QUERY_DATA = 4
+CMD_DEVICE_ID = 5
+CMD_SLEEP = 6
+CMD_FIRMWARE = 7
+CMD_WORKING_PERIOD = 8
+MODE_ACTIVE = 0
+MODE_QUERY = 1
+PERIOD_CONTINUOUS = 0
 
-#TODO: Commands against the sensor should read the reply and return success status.
+WAKE_UP_DELAY = 30
 
-class SDS011(object):
-    """Provides method to read from a SDS011 air particlate density sensor
-    using UART.
-    """
+JSON_FILE = '/var/www/html/aqi.json'
 
-    HEAD = b'\xaa'
-    TAIL = b'\xab'
-    CMD_ID = b'\xb4'
+MQTT_HOST = ''
+MQTT_TOPIC = '/weather/particulatematter'
 
-    # The sent command is a read or a write
-    READ = b"\x00"
-    WRITE = b"\x01"
+ser = serial.Serial()
+ser.port = "/dev/ttyUSB0"
+ser.baudrate = 9600
 
-    REPORT_MODE_CMD = b"\x02"
-    ACTIVE = b"\x00"
-    PASSIVE = b"\x01"
+ser.open()
+ser.flushInput()
 
-    QUERY_CMD = b"\x04"
+byte, data = 0, ""
 
-    # The sleep command ID
-    SLEEP_CMD = b"\x06"
-    # Sleep and work byte
-    SLEEP = b"\x00"
-    WORK = b"\x01"
+def dump(d, prefix=''):
+    print(prefix + ' '.join(x.encode('hex') for x in d))
 
-    # The work period command ID
-    WORK_PERIOD_CMD = b'\x08'
+def construct_command(cmd, data=[]):
+    assert len(data) <= 12
+    data += [0,]*(12-len(data))
+    checksum = (sum(data)+cmd-2)%256
+    ret = "\xaa\xb4" + chr(cmd)
+    ret += ''.join(chr(x) for x in data)
+    ret += "\xff\xff" + chr(checksum) + "\xab"
 
-    def __init__(self, serial_port, baudrate=9600, timeout=2,
-                 use_query_mode=True):
-        """Initialise and open serial port.
-        """
-        self.ser = serial.Serial(port=serial_port,
-                                 baudrate=baudrate,
-                                 timeout=timeout)
-        self.ser.flush()
-        self.set_report_mode(active=not use_query_mode)
+    if DEBUG:
+        dump(ret, '> ')
+    return ret
 
-    def _execute(self, cmd_bytes):
-        """Writes a byte sequence to the serial.
-        """
-        self.ser.write(cmd_bytes)
+def process_data(d):
+    r = struct.unpack('<HHxxBB', d[2:])
+    pm25 = r[0]/10.0
+    pm10 = r[1]/10.0
+    checksum = sum(ord(v) for v in d[2:8])%256
+    return [pm25, pm10]
+    #print("PM 2.5: {} μg/m^3  PM 10: {} μg/m^3 CRC={}".format(pm25, pm10, "OK" if (checksum==r[2] and r[3]==0xab) else "NOK"))
 
-    def _get_reply(self):
-        """Read reply from device."""
-        raw = self.ser.read(size=10)
-        print("The Array is: ", raw) #printing the array
-        data = raw[2:8]
-        if (sum(ord(d) for d in data) & 255) != raw[8]:
-            return None  #TODO: also check cmd id
-        return raw
+def process_version(d):
+    r = struct.unpack('<BBBHBB', d[3:])
+    checksum = sum(ord(v) for v in d[2:8])%256
+    print("Y: {}, M: {}, D: {}, ID: {}, CRC={}".format(r[0], r[1], r[2], hex(r[3]), "OK" if (checksum==r[4] and r[5]==0xab) else "NOK"))
 
-    def cmd_begin(self):
-        """Get command header and command ID bytes.
-        @rtype: list
-        """
-        return self.HEAD + self.CMD_ID
+def read_response():
+    byte = 0
+    while byte != "\xaa":
+        byte = ser.read(size=1)
 
-    def set_report_mode(self, read=False, active=False):
-        """Get sleep command. Does not contain checksum and tail.
-        @rtype: list
-        """
-        cmd = self.cmd_begin()
-        cmd += (self.REPORT_MODE_CMD
-                + (self.READ if read else self.WRITE)
-                + (self.ACTIVE if active else self.PASSIVE)
-                + b"\x00" * 10)
-        cmd = self._finish_cmd(cmd)
-        self._execute(cmd)
-        self._get_reply()
+    d = ser.read(size=9)
 
-    def query(self):
-        """Query the device and read the data.
+    if DEBUG:
+        dump(d, '< ')
+    return byte + d
 
-        @return: Air particulate density in micrograms per cubic meter.
-        @rtype: tuple(float, float) -> (PM2.5, PM10)
-        """
-        cmd = self.cmd_begin()
-        cmd += (self.QUERY_CMD
-                + b"\x00" * 12)
-        cmd = self._finish_cmd(cmd)
-        self._execute(cmd)
+def cmd_set_mode(mode=MODE_QUERY):
+    ser.write(construct_command(CMD_MODE, [0x1, mode]))
+    read_response()
 
-        raw = self._get_reply()
-        if raw is None:
-            return None  #TODO:
-        data = struct.unpack('<HH', raw[2:6])
-        pm25 = data[0] / 10.0
-        pm10 = data[1] / 10.0
-        return (pm25, pm10)
+def cmd_query_data():
+    ser.write(construct_command(CMD_QUERY_DATA))
+    d = read_response()
+    values = []
+    if d[1] == "\xc0":
+        values = process_data(d)
+    return values
 
-    def sleep(self, read=False, sleep=True):
-        """Sleep/Wake up the sensor.
+def cmd_set_sleep(sleep):
+    mode = 0 if sleep else 1
+    ser.write(construct_command(CMD_SLEEP, [0x1, mode]))
+    read_response()
 
-        @param sleep: Whether the device should sleep or work.
-        @type sleep: bool
-        """
-        cmd = self.cmd_begin()
-        cmd += (self.SLEEP_CMD
-                + (self.READ if read else self.WRITE)
-                + (self.SLEEP if sleep else self.WORK)
-                + b"\x00" * 10)
-        cmd = self._finish_cmd(cmd)
-        self._execute(cmd)
-        self._get_reply()
+def cmd_set_working_period(period):
+    ser.write(construct_command(CMD_WORKING_PERIOD, [0x1, period]))
+    read_response()
 
-    def set_work_period(self, read=False, work_time=0):
-        """Get work period command. Does not contain checksum and tail.
-        @rtype: list
-        """
-        assert work_time >= 0 and work_time <= 30
-        cmd = self.cmd_begin()
-        cmd += (self.WORK_PERIOD_CMD
-                + (self.READ if read else self.WRITE)
-                + bytes([work_time])
-                + b"\x00" * 10)
-        cmd = self._finish_cmd(cmd)
-        self._execute(cmd)
-        self._get_reply()
+def cmd_firmware_ver():
+    ser.write(construct_command(CMD_FIRMWARE))
+    d = read_response()
+    process_version(d)
 
-    def _finish_cmd(self, cmd, id1=b"\xff", id2=b"\xff"):
-        """Add device ID, checksum and tail bytes.
-        @rtype: list
-        """
-        cmd += id1 + id2
-        checksum = sum(ord(d) for d in cmd[2:]) % 256
-        cmd += bytes([checksum]) + self.TAIL
-        return cmd
+def cmd_set_id(id):
+    id_h = (id>>8) % 256
+    id_l = id % 256
+    ser.write(construct_command(CMD_DEVICE_ID, [0]*10+[id_l, id_h]))
+    read_response()
 
-    def _process_frame(self, data):
-        """Process a SDS011 data frame.
+def pub_mqtt(jsonrow):
+    cmd = ['mosquitto_pub', '-h', MQTT_HOST, '-t', MQTT_TOPIC, '-s']
+    print('Publishing using:', cmd)
+    with subprocess.Popen(cmd, shell=False, bufsize=0, stdin=subprocess.PIPE).stdin as f:
+        json.dump(jsonrow, f)
 
-        Byte positions:
-            0 - Header
-            1 - Command No.
-            2,3 - PM2.5 low/high byte
-            4,5 - PM10 low/high
-            6,7 - ID bytes
-            8 - Checksum - sum of bytes 2-7
-            9 - Tail
-        """
-        raw = struct.unpack('<HHxxBBB', data[2:])
-        checksum = sum(v for v in data[2:8]) % 256
-        if checksum != data[8]:
-            return None
-        pm25 = raw[0] / 10.0
-        pm10 = raw[1] / 10.0
-        return (pm25, pm10)
+def init_sensor():
+    cmd_set_sleep(0)
+    cmd_firmware_ver()
+    cmd_set_working_period(PERIOD_CONTINUOUS)
+    cmd_set_mode(MODE_QUERY);
 
-    def read(self):
-        """Read sensor data.
+def get_sensor_data():
+    cmd_set_sleep(0)
+    print("Wait a while for the sensor to wake up ...")
+    time.sleep(WAKE_UP_DELAY)
+    for t in range(15):
+        values = cmd_query_data();
+        if values is not None and len(values) == 2:
+            print("PM2.5: ", values[0], ", PM10: ", values[1])
+            data= values
+            time.sleep(2)
+    #  Put sensor to sleep
+    cmd_set_sleep(1)
+    time.sleep(10)
+    return data
 
-        @return: PM2.5 and PM10 concetration in micrograms per cude meter.
-        @rtype: tuple(float, float) - first is PM2.5.
-        """
-        byte = 0
-        while byte != self.HEAD:
-            byte = self.ser.read(size=1)
-            d = self.ser.read(size=10)
-            if d[0:1] == b"\xc0":
-                data = self._process_frame(byte + d)
-                return data
+if __name__ == "__main__":
+    cmd_set_sleep(0)
+    cmd_firmware_ver()
+    cmd_set_working_period(PERIOD_CONTINUOUS)
+    cmd_set_mode(MODE_QUERY);
+    while True:
+        cmd_set_sleep(0)
+        print("Wait a while for the sensor to wake up ...")
+        time.sleep(30)
+        for t in range(15):
+            values = cmd_query_data();
+            if values is not None and len(values) == 2:
+              print("PM2.5: ", values[0], ", PM10: ", values[1])
+              time.sleep(2)
 
+        # open stored data
+        try:
+            with open(JSON_FILE) as json_data:
+                data = json.load(json_data)
+        except IOError as e:
+            data = []
 
+        # check if length is more than 100 and delete first element
+        if len(data) > 100:
+            data.pop(0)
+
+        # append new values
+        jsonrow = {'pm25': values[0], 'pm10': values[1], 'time': time.strftime("%d.%m.%Y %H:%M:%S")}
+        data.append(jsonrow)
+
+        # save it
+        with open(JSON_FILE, 'w') as outfile:
+            json.dump(data, outfile)
+
+        if MQTT_HOST != '':
+            pub_mqtt(jsonrow)
+            
+        print("Going to sleep for 1 min...")
+        cmd_set_sleep(1)
+        time.sleep(60)
