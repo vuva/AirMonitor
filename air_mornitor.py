@@ -165,7 +165,7 @@ while True:
             low_humidity = row[1]
             low_aqi_index= row[2]
     
-        sqlite_select_query = """SELECT temperature, humidity,aqi_index from air_info order by id desc limit ?"""
+        sqlite_select_query = """SELECT MAX(temperature), MAX(humidity), MAX(aqi_index) from air_info order by id desc limit ?"""
         cursorObj.execute(sqlite_select_query, (300,))
         records = cursorObj.fetchall()
     
