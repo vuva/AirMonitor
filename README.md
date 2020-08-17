@@ -26,4 +26,8 @@ $ pip install spidev
 $ pip install pyserial
 ```
 
+### Run:
+```
+$ python air_mornitor.py
+```
 Have fun !
