@@ -1,2 +1,29 @@
 # AirMonitor
 A Raspberry Pi air monitor: temperature, humidity, air pressure, PM2.5, PM10, AQI.
+- Use sensor BME280 for temperature, humidity, air pressure via I2C interface.
+- Use sensor Nova SDS011 for PM2.5, PM10 via USB interface.
+- AQI is calculated with python-aqi EPA algorithm.
+- Display using an SSD1305 2.23 inch OLED screen via SPI interface.
+
+## Prequisites:
+
+1. Enable I2C and SPI.
+
+2. Install dependancies:
+```
+$ sudo apt install python-pip
+
+$ pip install python-aqi
+
+$ pip install smbus2
+$ pip install RPi-bme280
+
+$ sudo apt-get install python-pil
+$ sudo apt-get install python-numpy
+$ pip install RPi.GPIO
+$ pip install spidev
+
+$ pip install pyserial
+```
+
+Have fun !
