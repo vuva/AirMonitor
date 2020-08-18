@@ -18,8 +18,8 @@ import aqi
 import sensor_bme280 as BME280_SENSOR
 import sensor_sds011 as SDS011_SENSOR
 
-SAMPLING_INTERVAL = 120 - 40
-HISTORY_THRESHOLD = 6
+SAMPLING_INTERVAL = 120 - 40 # seconds
+HISTORY_THRESHOLD = 12 # hours
 
 # Raspberry Pi pin configuration:
 RST = 25     # on the PiOLED this pin isnt used
@@ -100,13 +100,15 @@ try:
     con = sl.connect('air-monitor.db')
     cursorObj = con.cursor()
     cursorObj.execute(
-        "CREATE TABLE air_info(id integer PRIMARY KEY, timestamp datetime, temperature FLOAT, humidity FLOAT, air_pressure FLOAT,pm25 FLOAT,pm10 FLOAT,aqi_index integer)")
+        "CREATE TABLE air_info(id integer PRIMARY KEY, timestamp datetime, temperature FLOAT, humidity FLOAT, air_pressure FLOAT,pm25 FLOAT,pm10 FLOAT,aqi_index integer, status_bme280 bool, status_sds011 bool)")
 except Exception as error:
     print("Create table " + str(error))
 
 
 
-status="V"
+status_bme280=False
+status_sds011=False
+
 temperature = -271.13
 humidity = 0
 air_pressure = 0
@@ -130,8 +132,9 @@ while True:
         temperature = bme280_data.temperature
         humidity = bme280_data.humidity
         air_pressure = bme280_data.pressure
+        status_bme280 = True
     else:
-        status = "X"
+        status_bme280 = False
 
     # Get PM2.5 and PM10 data
     sds011_data = SDS011_SENSOR.get_sensor_data()
@@ -140,17 +143,18 @@ while True:
             (aqi.POLLUTANT_PM25, sds011_data[0]),
             (aqi.POLLUTANT_PM10, sds011_data[1])
         ])
+        status_sds011 = True
     else:
-        status = "X"
+        status_sds011 = False
 
     now=datetime.datetime.now()
-    if status != "X":
+    if status_bme280 or status_sds011 :
         try:
             sqlite_insert_with_param = """INSERT INTO 'air_info'
-                                      ('timestamp', 'temperature', 'humidity', 'air_pressure','pm25','pm10','aqi_index') 
-                                      VALUES (?, ?, ?, ? ,? ,? ,?);"""
+                                      ('timestamp', 'temperature', 'humidity', 'air_pressure','pm25','pm10','aqi_index', 'status_bme280','status_sds011') 
+                                      VALUES (?, ?, ?, ? ,? ,? ,? ,?, ?);"""
 
-            data_tuple = (now,temperature, humidity, air_pressure, sds011_data[0], sds011_data[1], int(aqi_index))
+            data_tuple = (now,temperature, humidity, air_pressure, sds011_data[0], sds011_data[1], int(aqi_index), status_bme280, status_bme280)
             cursorObj.execute(sqlite_insert_with_param, data_tuple)
             con.commit()
             print("Data added successfully \n")
@@ -188,7 +192,8 @@ while True:
     draw.text((x, top),    "Temp" + u'\u00B0' +"C"   ,  font=header_font, fill=255)
     draw.text((x+44, top),  "Humid%" ,  font=header_font, fill=255)
     draw.text((x+88, top), "AQI", font=header_font, fill=255)
-    draw.text((x+120, top), status , font=header_font, fill=255)
+    draw.text((x+114, top), "V" if status_bme280 else "X" , font=header_font, fill=255)
+    draw.text((x + 121, top), "V" if status_sds011 else "X", font=header_font, fill=255)
 
     draw.text((x, top + 9), "{:.1f}".format(temperature), font=main_font, fill=255)
     draw.text((x + 44, top + 9), "{:.1f}".format(humidity), font=main_font, fill=255)
