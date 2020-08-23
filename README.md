@@ -28,6 +28,6 @@ $ pip install pyserial
 
 ## Run:
 ```
-$ python air_mornitor.py
+$ python air_monitor.py
 ```
 Have fun !
