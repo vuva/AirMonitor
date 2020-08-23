@@ -3,7 +3,7 @@
 # "DATASHEET": http://cl.ly/ekot
 # https://gist.github.com/kadamski/92653913a53baf9dd1a8
 from __future__ import print_function
-import serial, struct, sys, time, json, subprocess
+import serial, struct, sys, time, json, subprocess, signal
 
 DEBUG = 0
 CMD_MODE = 2
@@ -16,8 +16,9 @@ MODE_ACTIVE = 0
 MODE_QUERY = 1
 PERIOD_CONTINUOUS = 0
 
-WAKE_UP_DELAY = 10
+WAKE_UP_DELAY = 30
 SAMPLING_ITI = 15
+SENSOR_TIMEOUT = 10
 
 JSON_FILE = '/var/www/html/aqi.json'
 
@@ -131,7 +132,13 @@ def get_sensor_data():
     time.sleep(10)
     return data
 
+def handler(signum, frame):
+    print("Forever is over!")
+    raise Exception("end of time")
+
+
 if __name__ == "__main__":
+    signal.signal(signal.SIGALRM, handler)
     cmd_set_sleep(0)
     cmd_firmware_ver()
     cmd_set_working_period(PERIOD_CONTINUOUS)
@@ -141,11 +148,15 @@ if __name__ == "__main__":
         print("Wait a while for the sensor to wake up ...")
         time.sleep(30)
         for t in range(15):
-            values = cmd_query_data();
-            if values is not None and len(values) == 2:
-              print("PM2.5: ", values[0], ", PM10: ", values[1])
-              time.sleep(2)
-
+            try:
+                signal.alarm(SENSOR_TIMEOUT)
+                values = cmd_query_data();
+                signal.alarm(0)
+                if values is not None and len(values) == 2:
+                  print("PM2.5: ", values[0], ", PM10: ", values[1])
+                  time.sleep(2)
+            except Exception, exc:
+                print(exc)
         # open stored data
         try:
             with open(JSON_FILE) as json_data:

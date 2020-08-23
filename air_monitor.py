@@ -18,7 +18,7 @@ import aqi
 import sensor_bme280 as BME280_SENSOR
 import sensor_sds011 as SDS011_SENSOR
 
-SAMPLING_INTERVAL = 120 - 40 # seconds
+SAMPLING_INTERVAL = 120 - 60 # seconds
 HISTORY_THRESHOLD = 12 # hours
 
 # Raspberry Pi pin configuration:
@@ -163,7 +163,7 @@ while True:
 
     # Get history data
     try:
-        sqlite_select_query = """SELECT MIN(temperature), MIN(humidity),MIN(aqi_index) from air_info where timestamp> ?"""
+        sqlite_select_query = """SELECT MIN(temperature), MIN(humidity),MIN(aqi_index) from air_info where timestamp> ? and status_bme280=1 and status_sds011 =1 """
         cursorObj.execute(sqlite_select_query, (now - datetime.timedelta(hours=HISTORY_THRESHOLD),))
         records = cursorObj.fetchall()
 
