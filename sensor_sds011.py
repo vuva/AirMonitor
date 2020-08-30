@@ -116,17 +116,23 @@ def init_sensor():
     cmd_firmware_ver()
     cmd_set_working_period(PERIOD_CONTINUOUS)
     cmd_set_mode(MODE_QUERY);
+    signal.signal(signal.SIGALRM, handler)
 
 def get_sensor_data():
     cmd_set_sleep(0)
     print("Wait a while for the sensor to wake up ...")
     time.sleep(WAKE_UP_DELAY)
     for t in range(SAMPLING_ITI):
-        values = cmd_query_data();
-        if values is not None and len(values) == 2:
-            print("PM2.5: ", values[0], ", PM10: ", values[1])
-            data= values
-            time.sleep(2)
+        try:
+            signal.alarm(SENSOR_TIMEOUT)
+            values = cmd_query_data();
+            signal.alarm(0)
+            if values is not None and len(values) == 2:
+                data = values
+                print(t,". PM2.5: ", values[0], ", PM10: ", values[1])
+                time.sleep(2)
+        except Exception, exc:
+            print(exc)
     #  Put sensor to sleep
     cmd_set_sleep(1)
     time.sleep(10)
@@ -138,7 +144,6 @@ def handler(signum, frame):
 
 
 if __name__ == "__main__":
-    signal.signal(signal.SIGALRM, handler)
     cmd_set_sleep(0)
     cmd_firmware_ver()
     cmd_set_working_period(PERIOD_CONTINUOUS)
@@ -148,15 +153,11 @@ if __name__ == "__main__":
         print("Wait a while for the sensor to wake up ...")
         time.sleep(30)
         for t in range(15):
-            try:
-                signal.alarm(SENSOR_TIMEOUT)
-                values = cmd_query_data();
-                signal.alarm(0)
-                if values is not None and len(values) == 2:
-                  print("PM2.5: ", values[0], ", PM10: ", values[1])
-                  time.sleep(2)
-            except Exception, exc:
-                print(exc)
+            values = cmd_query_data();
+            if values is not None and len(values) == 2:
+              print("PM2.5: ", values[0], ", PM10: ", values[1])
+              time.sleep(2)
+
         # open stored data
         try:
             with open(JSON_FILE) as json_data:
