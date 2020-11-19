@@ -1,13 +1,14 @@
-# AirMonitor
+# Indoor Climate Control
 A Raspberry Pi air monitor: temperature, humidity, air pressure, PM2.5, PM10, AQI.
 - Use sensor BME280 for temperature, humidity, air pressure via I2C interface.
 - Use sensor Nova SDS011 for PM2.5, PM10 via USB interface.
 - AQI is calculated with python-aqi EPA algorithm.
 - Display using an SSD1305 2.23 inch OLED screen via SPI interface.
+- Use IFTTT webhook to control air purifier/conditioner with smart WiFi plugs.
 
-## Prequisites:
+## Software Prequisites:
 
-1. Enable I2C and SPI.
+1. Enable I2C and SPI .
 
 2. Install dependancies:
 ```
