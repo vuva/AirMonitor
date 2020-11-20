@@ -25,10 +25,12 @@ $ pip install RPi.GPIO
 $ pip install spidev
 
 $ pip install pyserial
+
+$ pip install requests
 ```
 
-## Run:
+## Usage:
 ```
-$ python air_monitor.py
+$ python indoor_climate_control.py
 ```
 Have fun !
