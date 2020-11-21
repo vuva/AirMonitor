@@ -4,7 +4,7 @@
 # https://gist.github.com/kadamski/92653913a53baf9dd1a8
 
 from __future__ import print_function
-import serial, struct, sys, time, json, subprocess, signal
+import serial, struct, sys, time, json, subprocess, signal, logging
 
 DEBUG = 0
 CMD_MODE = 2
@@ -21,11 +21,6 @@ WAKE_UP_DELAY = 30
 SAMPLING_ITI = 15
 SENSOR_TIMEOUT = 10
 
-JSON_FILE = '/var/www/html/aqi.json'
-
-MQTT_HOST = ''
-MQTT_TOPIC = '/weather/particulatematter'
-
 ser = serial.Serial()
 ser.port = "/dev/ttyUSB0"
 ser.baudrate = 9600
@@ -36,7 +31,7 @@ ser.flushInput()
 byte, data = 0, ""
 
 def dump(d, prefix=''):
-    print(prefix + ' '.join(x.encode('hex') for x in d))
+    logging.debug(prefix + ' '.join(x.encode('hex') for x in d))
 
 def construct_command(cmd, data=[]):
     assert len(data) <= 12
@@ -56,12 +51,12 @@ def process_data(d):
     pm10 = r[1]/10.0
     checksum = sum(ord(v) for v in d[2:8])%256
     return [pm25, pm10]
-    #print("PM 2.5: {} μg/m^3  PM 10: {} μg/m^3 CRC={}".format(pm25, pm10, "OK" if (checksum==r[2] and r[3]==0xab) else "NOK"))
+    #logging.debug("PM 2.5: {} μg/m^3  PM 10: {} μg/m^3 CRC={}".format(pm25, pm10, "OK" if (checksum==r[2] and r[3]==0xab) else "NOK"))
 
 def process_version(d):
     r = struct.unpack('<BBBHBB', d[3:])
     checksum = sum(ord(v) for v in d[2:8])%256
-    print("Y: {}, M: {}, D: {}, ID: {}, CRC={}".format(r[0], r[1], r[2], hex(r[3]), "OK" if (checksum==r[4] and r[5]==0xab) else "NOK"))
+    logging.debug("Y: {}, M: {}, D: {}, ID: {}, CRC={}".format(r[0], r[1], r[2], hex(r[3]), "OK" if (checksum==r[4] and r[5]==0xab) else "NOK"))
 
 def read_response():
     byte = 0
@@ -106,12 +101,6 @@ def cmd_set_id(id):
     ser.write(construct_command(CMD_DEVICE_ID, [0]*10+[id_l, id_h]))
     read_response()
 
-def pub_mqtt(jsonrow):
-    cmd = ['mosquitto_pub', '-h', MQTT_HOST, '-t', MQTT_TOPIC, '-s']
-    print('Publishing using:', cmd)
-    with subprocess.Popen(cmd, shell=False, bufsize=0, stdin=subprocess.PIPE).stdin as f:
-        json.dump(jsonrow, f)
-
 def init_sensor():
     cmd_set_sleep(0)
     cmd_firmware_ver()
@@ -121,7 +110,7 @@ def init_sensor():
 
 def get_sensor_data():
     cmd_set_sleep(0)
-    print("Wait a while for the sensor to wake up ...")
+    logging.info("Wait a while for the sensor to wake up ...")
     time.sleep(WAKE_UP_DELAY)
     for t in range(SAMPLING_ITI):
         try:
@@ -130,57 +119,18 @@ def get_sensor_data():
             signal.alarm(0)
             if values is not None and len(values) == 2:
                 data = values
-                print(t,". PM2.5: ", values[0], ", PM10: ", values[1])
+                logging.debug(str(t) + ". PM2.5: " + str(values[0]) + ", PM10: " + str(values[1]))
                 time.sleep(2)
         except Exception, exc:
-            print(exc)
+            logging.error(exc)
     #  Put sensor to sleep
     cmd_set_sleep(1)
     time.sleep(10)
     return data
 
 def handler(signum, frame):
-    print("Forever is over!")
+    logging.info("Forever is over!")
     raise Exception("end of time")
 
 
-if __name__ == "__main__":
-    cmd_set_sleep(0)
-    cmd_firmware_ver()
-    cmd_set_working_period(PERIOD_CONTINUOUS)
-    cmd_set_mode(MODE_QUERY);
-    while True:
-        cmd_set_sleep(0)
-        print("Wait a while for the sensor to wake up ...")
-        time.sleep(30)
-        for t in range(15):
-            values = cmd_query_data();
-            if values is not None and len(values) == 2:
-              print("PM2.5: ", values[0], ", PM10: ", values[1])
-              time.sleep(2)
 
-        # open stored data
-        try:
-            with open(JSON_FILE) as json_data:
-                data = json.load(json_data)
-        except IOError as e:
-            data = []
-
-        # check if length is more than 100 and delete first element
-        if len(data) > 100:
-            data.pop(0)
-
-        # append new values
-        jsonrow = {'pm25': values[0], 'pm10': values[1], 'time': time.strftime("%d.%m.%Y %H:%M:%S")}
-        data.append(jsonrow)
-
-        # save it
-        with open(JSON_FILE, 'w') as outfile:
-            json.dump(data, outfile)
-
-        if MQTT_HOST != '':
-            pub_mqtt(jsonrow)
-            
-        print("Going to sleep for 1 min...")
-        cmd_set_sleep(1)
-        time.sleep(60)

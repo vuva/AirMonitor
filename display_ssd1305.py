@@ -1,4 +1,5 @@
 import math
+import logging
 import RPi.GPIO as GPIO
 
 import SPI
@@ -95,21 +96,21 @@ def display(displayed_data):
     temperature =  displayed_data["temperature"]
     humidity =  displayed_data["humidity"]
     aqi_index =  displayed_data["aqi_index"]
-    status_bme280 =  displayed_data["status_bme280"]
-    status_sds011 =  displayed_data["status_sds011"]
+    status_atmosphere =  displayed_data["status_atmosphere"]
+    status_dust =  displayed_data["status_dust"]
 
-    print("MIN: ", low_temperature, low_humidity, low_aqi_index)
-    print("MAX: ", high_temperature, high_humidity, high_aqi_index)
-    print("Current: ", temperature, humidity, aqi_index)
-    print("Refreshing display ...")
+    logging.debug("MIN: " + str(low_temperature) +" "+ str(low_humidity)+" "+ str(low_aqi_index))
+    logging.debug("MAX: "+ str(high_temperature)+" "+ str(high_humidity)+" "+ str(high_aqi_index))
+    logging.debug("Current: "+ str(temperature)+" "+ str(humidity)+" "+ str(aqi_index))
+    logging.info("Refreshing display ...")
     # Draw a black filled box to clear the image.
     draw.rectangle((0, 0, width, height), outline=0, fill=0)
 
     draw.text((x, top), "Temp" + u'\u00B0' + "C", font=header_font, fill=255)
     draw.text((x + 44, top), "Humid%", font=header_font, fill=255)
     draw.text((x + 88, top), "AQI", font=header_font, fill=255)
-    draw.text((x + 114, top), "L" if status_bme280 else "X", font=header_font, fill=255)
-    draw.text((x + 121, top), "Y" if status_sds011 else "X", font=header_font, fill=255)
+    draw.text((x + 114, top), "L" if status_atmosphere else "X", font=header_font, fill=255)
+    draw.text((x + 121, top), "Y" if status_dust else "X", font=header_font, fill=255)
 
     draw.text((x, top + 9), "{:.1f}".format(temperature), font=main_font, fill=255)
     draw.text((x + 44, top + 9), "{:.1f}".format(humidity), font=main_font, fill=255)

@@ -23,45 +23,51 @@ import sqlite3 as sl
 import datetime
 import aqi
 import threading
+import logging
 
-import sensor_bme280 as BME280_SENSOR
-import sensor_sds011 as SDS011_SENSOR
-import display_ssd1305 as SSD1305_DISPLAY
+import sensor_bme280 as ATMOSPHERIC_SENSOR
+import sensor_sds011 as DUST_SENSOR
+import display_ssd1305 as LED_DISPLAY
 
 import IFTTT_webhook as DEVICE_TRIGGER
+
+######################################
+LOG_LEVEL = logging.DEBUG
 
 DB_NAME = 'air-monitor-v2.db'
 
 SAMPLING_INTERVAL = 15*60 - 60 # seconds
 HISTORY_THRESHOLD = 12 # hours
 LED_REFRESH_INTERVAL = 5*60 # seconds
-DEVICE_CONTROL_INTERVAL = 1*60 # seconds
+DEVICE_CONTROL_INTERVAL = 15*60 # seconds
 
-PURIFIER_ON_THRESHOLD = 2
-PURIFIER_OFF_THRESHOLD = 0
+PURIFIER_ON_THRESHOLD = 50
+PURIFIER_OFF_THRESHOLD = 20
 
-def update_bme280():
-    status_bme280 = False
+######################################
+
+def update_atmosphere():
+    status_atmosphere = False
     try:
         con = sl.connect(DB_NAME, detect_types=sl.PARSE_DECLTYPES | sl.PARSE_COLNAMES)
         cursorObj = con.cursor()
     except Exception as error:
-        print("update_bme280 DB " + str(error))
+        logging.error("update_atmosphere DB " + str(error))
 
     while True:
-        bme280_data = BME280_SENSOR.get_sensor_data()
-        if (bme280_data):
-            temperature = bme280_data.temperature
-            humidity = bme280_data.humidity
-            air_pressure = bme280_data.pressure
-            status_bme280 = True
+        atmosphere_data = ATMOSPHERIC_SENSOR.get_sensor_data()
+        if (atmosphere_data):
+            temperature = atmosphere_data.temperature
+            humidity = atmosphere_data.humidity
+            air_pressure = atmosphere_data.pressure
+            status_atmosphere = True
         else:
-            status_bme280 = False
+            status_atmosphere = False
 
         now = datetime.datetime.now()
-        if status_bme280 :
+        if status_atmosphere :
             try:
-                sqlite_insert_with_param = """INSERT INTO 'bme280_info'
+                sqlite_insert_with_param = """INSERT INTO 'atmosphere_info'
                                           ('timestamp', 'temperature', 'humidity', 'air_pressure') 
                                           VALUES (?, ?, ?, ?);"""
 
@@ -69,53 +75,53 @@ def update_bme280():
                     now, temperature, humidity, air_pressure)
                 cursorObj.execute(sqlite_insert_with_param, data_tuple)
                 con.commit()
-                print("bme280 data added successfully \n")
+                logging.info("atmosphere data added successfully \n")
             except Exception as error:
-                print("Insert " + str(error))
+                logging.error("Insert " + str(error))
 
         time.sleep(SAMPLING_INTERVAL)
     cursorObj.close()
     con.close()
 
 
-def update_sds011():
+def update_dust():
     
     try:
         con = sl.connect(DB_NAME, detect_types=sl.PARSE_DECLTYPES | sl.PARSE_COLNAMES)
         cursorObj = con.cursor()
     except Exception as error:
-        print("update_sds011 DB " + str(error))
+        logging.error("update_dust DB " + str(error))
 
     while True:
         try:
-            sds011_data = SDS011_SENSOR.get_sensor_data()
+            dust_data = DUST_SENSOR.get_sensor_data()
         except Exception, exc:
-            print(exc)
-            status_sds011 = False
+            logging.error(exc)
+            status_dust = False
 
-        if (sds011_data[0] and sds011_data[1]):
+        if (dust_data[0] and dust_data[1]):
             aqi_index = aqi.to_aqi([
-                (aqi.POLLUTANT_PM25, sds011_data[0]),
-                (aqi.POLLUTANT_PM10, sds011_data[1])
+                (aqi.POLLUTANT_PM25, dust_data[0]),
+                (aqi.POLLUTANT_PM10, dust_data[1])
             ])
-            status_sds011 = True
+            status_dust = True
         else:
-            status_sds011 = False
+            status_dust = False
 
         now = datetime.datetime.now()
-        if status_sds011:
+        if status_dust:
             try:
-                sqlite_insert_with_param = """INSERT INTO 'sds011_info'
+                sqlite_insert_with_param = """INSERT INTO 'dust_info'
                                           ('timestamp','pm25','pm10','aqi_index') 
                                           VALUES (?, ?, ?, ?);"""
 
                 data_tuple = (
-                    now, sds011_data[0], sds011_data[1], int(aqi_index))
+                    now, dust_data[0], dust_data[1], int(aqi_index))
                 cursorObj.execute(sqlite_insert_with_param, data_tuple)
                 con.commit()
-                print("sds011 data added successfully \n")
+                logging.info("dust data added successfully \n")
             except Exception as error:
-                print("Insert " + str(error))
+                logging.error("Insert " + str(error))
 
         thisdict = {
             "brand": "Ford",
@@ -135,10 +141,10 @@ def update_display():
         con = sl.connect(DB_NAME, detect_types=sl.PARSE_DECLTYPES | sl.PARSE_COLNAMES)
         cursorObj = con.cursor()
     except Exception as error:
-        print("update_display DB " + str(error))
+        logging.error("update_display DB " + str(error))
 
-    status_bme280 = False
-    status_sds011 = False
+    status_atmosphere = False
+    status_dust = False
 
     temperature = -271.13
     humidity = 0
@@ -159,25 +165,25 @@ def update_display():
         # Get data
         now = datetime.datetime.now()
         try:
-            bme280_query = """SELECT timestamp,temperature,humidity from bme280_info order by timestamp desc LIMIT 1 """
-            bme280_min_max_query = """SELECT MIN(temperature), MIN(humidity), MAX(temperature), MAX(humidity) from bme280_info where timestamp> ? """
-            sds011_query = """SELECT timestamp,aqi_index from sds011_info order by timestamp desc LIMIT 1 """
-            sds011_min_max_query = """SELECT MIN(aqi_index),MAX(aqi_index) from sds011_info where timestamp> ?  """
+            atmosphere_query = """SELECT timestamp,temperature,humidity from atmosphere_info order by timestamp desc LIMIT 1 """
+            atmosphere_min_max_query = """SELECT MIN(temperature), MIN(humidity), MAX(temperature), MAX(humidity) from atmosphere_info where timestamp> ? """
+            dust_query = """SELECT timestamp,aqi_index from dust_info order by timestamp desc LIMIT 1 """
+            dust_min_max_query = """SELECT MIN(aqi_index),MAX(aqi_index) from dust_info where timestamp> ?  """
 
-            cursorObj.execute(bme280_query)
+            cursorObj.execute(atmosphere_query)
             records = cursorObj.fetchone()
-            # print(records)
+            logging.debug(records)
 
             if records is not None and records[0] is not None and records[1] is not None and records[2] is not None and records[0] >= now - datetime.timedelta(seconds=SAMPLING_INTERVAL):
-                status_bme280 = True
+                status_atmosphere = True
                 temperature = records[1]
                 humidity = records[2]
             else:
-                status_bme280 = False
+                status_atmosphere = False
 
-            cursorObj.execute(bme280_min_max_query, (now - datetime.timedelta(hours=HISTORY_THRESHOLD),))
+            cursorObj.execute(atmosphere_min_max_query, (now - datetime.timedelta(hours=HISTORY_THRESHOLD),))
             records = cursorObj.fetchone()
-            # print (records)
+            logging.debug(records)
 
             if  records is not None and records[0] is not None and records[1] is not None and records[2] is not None and records[3]:
                 low_temperature = records[0]
@@ -185,32 +191,31 @@ def update_display():
                 high_temperature = records[2]
                 high_humidity = records[3]
 
-
-            cursorObj.execute(sds011_query)
+            cursorObj.execute(dust_query)
             records = cursorObj.fetchone()
-            # print(records)
+            logging.debug(records)
 
             if records is not None and records[0] is not None and records[1] is not None and records[0] >= now - datetime.timedelta(seconds=SAMPLING_INTERVAL):
                 aqi_index = records[1]
-                status_sds011 = True
+                status_dust = True
             else:
-                status_sds011 = False
+                status_dust = False
 
-            cursorObj.execute(sds011_min_max_query, (now - datetime.timedelta(hours=HISTORY_THRESHOLD),))
+            cursorObj.execute(dust_min_max_query, (now - datetime.timedelta(hours=HISTORY_THRESHOLD),))
             records = cursorObj.fetchone()
-            # print(records)
+            logging.debug(records)
 
             if records is not None and records[0] is not None and records[1] is not None :
                 low_aqi_index = records[0]
                 high_aqi_index = records[1]
 
         except Exception as error:
-            print("Query " + str(error))
+            logging.error("Query " + str(error))
             continue
 
         displayed_data = {
-            "status_bme280": status_bme280,
-            "status_sds011": status_sds011,
+            "status_atmosphere": status_atmosphere,
+            "status_dust": status_dust,
             "temperature": temperature,
             "low_temperature": low_temperature,
             "high_temperature": high_temperature,
@@ -222,7 +227,7 @@ def update_display():
             "high_aqi_index": high_aqi_index,
 
         }
-        SSD1305_DISPLAY.display(displayed_data)
+        LED_DISPLAY.display(displayed_data)
 
     cursorObj.close()
     con.close()
@@ -235,39 +240,39 @@ def control_devices():
         con = sl.connect(DB_NAME, detect_types=sl.PARSE_DECLTYPES | sl.PARSE_COLNAMES)
         cursorObj = con.cursor()
     except Exception as error:
-        print("control_devices DB " + str(error))
+        logging.error("control_devices DB " + str(error))
 
     while True:
         time.sleep(DEVICE_CONTROL_INTERVAL)
         # Get data
         now = datetime.datetime.now()
         try:
-            bme280_query = """SELECT timestamp,temperature,humidity from bme280_info order by timestamp desc LIMIT 1 """
-            sds011_query = """SELECT timestamp,aqi_index from sds011_info order by timestamp desc LIMIT 1 """           
+            atmosphere_query = """SELECT timestamp,temperature,humidity from atmosphere_info order by timestamp desc LIMIT 1 """
+            dust_query = """SELECT timestamp,aqi_index from dust_info order by timestamp desc LIMIT 1 """           
 
-            cursorObj.execute(bme280_query)
+            cursorObj.execute(atmosphere_query)
             records = cursorObj.fetchone()
             
             if records is not None and records[0] is not None and records[1] is not None and records[2] is not None and records[0] >= now - datetime.timedelta(seconds=SAMPLING_INTERVAL):
-                status_bme280 = True
+                status_atmosphere = True
                 temperature = records[1]
                 humidity = records[2]
             else:
-                status_bme280 = False
+                status_atmosphere = False
 
-            cursorObj.execute(sds011_query)
+            cursorObj.execute(dust_query)
             records = cursorObj.fetchone()
 
             if records is not None and records[0] is not None and records[1] is not None and records[0] >= now - datetime.timedelta(seconds=SAMPLING_INTERVAL):
                 aqi_index = records[1]
-                status_sds011 = True
+                status_dust = True
             else:
-                status_sds011 = False
+                status_dust = False
         except Exception as error:
-            print("Query " + str(error))
+            logging.error("Query " + str(error))
             continue
 
-        if not status_sds011 or not status_sds011:
+        if not status_dust or not status_dust:
             continue
 
         # Control logic
@@ -283,30 +288,34 @@ def control_devices():
     cursorObj.close()
     con.close()
 
+
+################################################################################
+
 if __name__ == "__main__":
+    logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s',level=LOG_LEVEL, datefmt='%d-%b-%y %H:%M:%S')
     # Database
     try:
         con = sl.connect(DB_NAME)
         cursorObj = con.cursor()
-        cursorObj.execute("CREATE TABLE bme280_info(id integer PRIMARY KEY, timestamp timestamp, temperature FLOAT, humidity FLOAT, air_pressure FLOAT)")
-        cursorObj.execute("CREATE TABLE sds011_info(id integer PRIMARY KEY, timestamp timestamp, pm25 FLOAT,pm10 FLOAT,aqi_index integer)")
+        cursorObj.execute("CREATE TABLE atmosphere_info(id integer PRIMARY KEY, timestamp timestamp, temperature FLOAT, humidity FLOAT, air_pressure FLOAT)")
+        cursorObj.execute("CREATE TABLE dust_info(id integer PRIMARY KEY, timestamp timestamp, pm25 FLOAT,pm10 FLOAT,aqi_index integer)")
     except Exception as error:
-        print("Create table " + str(error))
+        logging.error("Create table " + str(error))
     cursorObj.close()
     con.close()
 
-    bme280_thread = threading.Thread(target=update_bme280, args=())
-    print("Updating Temp and Humidity ...")
-    bme280_thread.start()
+    atmosphere_thread = threading.Thread(target=update_atmosphere, args=())
+    logging.info("Updating Temp and Humidity ...")
+    atmosphere_thread.start()
 
-    sds011_thread = threading.Thread(target=update_sds011, args=())
-    print("Updating PM2.5 ...")
-    sds011_thread.start()
+    dust_thread = threading.Thread(target=update_dust, args=())
+    logging.info("Updating PM2.5 ...")
+    dust_thread.start()
 
     display_thread = threading.Thread(target=update_display, args=())
-    print("Updating LED display ...")
+    logging.info("Updating LED display ...")
     display_thread.start()
 
     device_control_thread = threading.Thread(target=control_devices, args=())
-    print("Controlling devices ...")
+    logging.info("Controlling devices ...")
     device_control_thread.start()

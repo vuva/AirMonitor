@@ -1,5 +1,6 @@
 import smbus2
 import bme280
+import logging
 
 port = 1
 address = 0x76
@@ -14,17 +15,10 @@ def get_sensor_data():
         # compensated_reading object
         data = bme280.sample(bus, address, calibration_params)
 
-        # the compensated_reading class has the following attributes
-        # print(data.id)
-        # print(data.timestamp)
-        # print(data.temperature)
-        # print(data.pressure)
-        # print(data.humidity)
-
-        # there is a handy string representation too
-        print(data)
+                # there is a handy string representation too
+        logging.info(data)
         return data
     except Exception as error:
-        print('Caught this error: ' + repr(error))
+        logging.error('Caught this error: ' + repr(error))
 
     return None
