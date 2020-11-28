@@ -6,6 +6,8 @@ A Raspberry Pi air monitor: temperature, humidity, air pressure, PM2.5, PM10, AQ
 - Display using an SSD1305 2.23 inch OLED screen via SPI interface.
 - Use IFTTT webhook to control air purifier/conditioner with smart WiFi plugs.
 
+Tutorial: https://www.instructables.com/Raspberry-Pi-Indoor-Climate-Monitoring-and-Control/
+
 ## Software Prequisites:
 
 1. Enable I2C and SPI .
