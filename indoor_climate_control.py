@@ -38,11 +38,15 @@ DB_NAME = 'air-monitor-v2.db'
 
 SAMPLING_INTERVAL = 15*60 - 60 # seconds
 HISTORY_THRESHOLD = 12 # hours
-LED_REFRESH_INTERVAL = 5*60 # seconds
+LED_REFRESH_INTERVAL = 2*60 # seconds
 DEVICE_CONTROL_INTERVAL = 15*60 # seconds
 
 PURIFIER_ON_THRESHOLD = 50
 PURIFIER_OFF_THRESHOLD = 20
+
+######################################
+
+purifier_on = False
 
 ######################################
 
@@ -123,12 +127,7 @@ def update_dust():
             except Exception as error:
                 logging.error("Insert " + str(error))
 
-        thisdict = {
-            "brand": "Ford",
-            "model": "Mustang",
-            "year": 1964
-        }
-        
+
         time.sleep(SAMPLING_INTERVAL)
     cursorObj.close()
     con.close()
@@ -161,7 +160,6 @@ def update_display():
     high_air_pressure = 0
     high_aqi_index = -1
     while True:
-        time.sleep(LED_REFRESH_INTERVAL)
         # Get data
         now = datetime.datetime.now()
         try:
@@ -228,13 +226,12 @@ def update_display():
 
         }
         LED_DISPLAY.display(displayed_data)
+        time.sleep(LED_REFRESH_INTERVAL)
 
     cursorObj.close()
     con.close()
 
 def control_devices():
-
-    purifier_on = False
 
     try:
         con = sl.connect(DB_NAME, detect_types=sl.PARSE_DECLTYPES | sl.PARSE_COLNAMES)
@@ -281,7 +278,7 @@ def control_devices():
             if result:
                 purifier_on = True
         elif purifier_on and aqi_index < PURIFIER_OFF_THRESHOLD:
-            DEVICE_TRIGGER.turn_off_device(DEVICE_TRIGGER.PURIFIER)
+            result = DEVICE_TRIGGER.turn_off_device(DEVICE_TRIGGER.PURIFIER)
             if result:
                 purifier_on = False
 
