@@ -18,20 +18,20 @@ HISTORY_THRESHOLD = 12 # hours
 def init_web_dashboard(db_name):
     global DB_NAME
     DB_NAME=db_name
-    print("init" + DB_NAME)
 
 def start_web_dashboard():
     app.run_server(host= '0.0.0.0',port='8888')
 
 def get_co2_data():
     data_query = "SELECT timestamp, co2_ppm from co2_info where timestamp> ? order by timestamp asc "
-    print("query" + DB_NAME)
     with sl.connect(DB_NAME) as con:
         cur = con.cursor()
         now = datetime.datetime.now()
         cur.execute(data_query, (now - datetime.timedelta(hours=HISTORY_THRESHOLD),))
         records = cur.fetchall()
         con.commit()
+        cur.close()
+    
     timestp=[]
     ppm=[]
     for record in records:
@@ -41,6 +41,7 @@ def get_co2_data():
         "xaxis":timestp,
         "yaxis":ppm,
     }
+    con.close()
     return data
 
 
@@ -103,7 +104,8 @@ content = html.Div(
         dbc.Row(
             [
                 dbc.Col(dcc.Graph(id="my_close_price_graph"), 
-                        width={"size": 10, "offset": 2}),
+                        width={"size": 10, "offset": 2},
+                        ),
             ]
         )
     ],

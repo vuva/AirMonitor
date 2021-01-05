@@ -1,3 +1,4 @@
+#!/usr/bin/python
 # Copyright (c) 2020 Vu Anh Vu
 #
 # This file is part of IndoorClimateControl.
@@ -37,7 +38,7 @@ LOG_LEVEL = logging.DEBUG
 
 DB_NAME = 'air-monitor-v3.db'
 
-SAMPLING_INTERVAL = 1*60 # seconds
+SAMPLING_INTERVAL = 5*60 # seconds
 HISTORY_THRESHOLD = 12 # hours
 LED_REFRESH_INTERVAL = 2*60 # seconds
 DEVICE_CONTROL_INTERVAL = 15*60 # seconds
@@ -140,8 +141,8 @@ def update_dust():
     cursorObj.close()
     con.close()
 
-def update_co2():
 
+def update_co2():
     try:
         con = sl.connect(DB_NAME, detect_types=sl.PARSE_DECLTYPES | sl.PARSE_COLNAMES)
         cursorObj = con.cursor()
@@ -152,9 +153,10 @@ def update_co2():
         co2_data=None
         try:
             co2_data = CO2_SENSOR.get_sensor_data()
-        except Exception, exc:
-            logging.error(exc)
+        except Exception as exc:
+            logging.error("Error getting co2 data: " + str(exc))
             status_dust = False
+
         if (co2_data):
             temperature = co2_data["temperature"]
             co2_ppm= co2_data["co2"]
@@ -278,8 +280,8 @@ def update_display():
     cursorObj.close()
     con.close()
 
-def control_devices():
 
+def control_devices():
     try:
         con = sl.connect(DB_NAME, detect_types=sl.PARSE_DECLTYPES | sl.PARSE_COLNAMES)
         cursorObj = con.cursor()

@@ -1,8 +1,8 @@
 import mh_z19, time, datetime, logging
 import sqlite3 as sl
 
-DB_NAME="co2-data.db"
 '''
+DB_NAME="co2-data.db"
 try:
         con = sl.connect(DB_NAME)
         cursorObj = con.cursor()
@@ -35,10 +35,15 @@ while 1:
 
 con.close()
 '''
+SAMPLING_ITI = 5
 def get_sensor_data():
-    data = mh_z19.read_all()
+    
+    for t in range(SAMPLING_ITI):
+        data = mh_z19.read_all()
+        time.sleep(2)
+    
+    logging.debug("Co2 Data: " + str(data))
     if data and data["co2"] and data["temperature"]:
-        logging.debug(data)
         return data
     return None
 
