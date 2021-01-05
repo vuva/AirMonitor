@@ -1,10 +1,11 @@
 # Indoor Climate Control
 A Raspberry Pi air monitor: temperature, humidity, air pressure, PM2.5, PM10, AQI.
-- Use sensor BME280 for temperature, humidity, air pressure via I2C interface.
-- Use sensor Nova SDS011 for PM2.5, PM10 via USB interface.
+- BME280 sensor for temperature, humidity, air pressure via I2C interface.
+- Nova SDS011 sensor for PM2.5, PM10 via USB interface.
 - AQI is calculated with python-aqi EPA algorithm.
 - Display using an SSD1305 2.23 inch OLED screen via SPI interface.
 - Use IFTTT webhook to control air purifier/conditioner with smart WiFi plugs.
+- Web Dashboard using Python Dash and Boostrap Dash.
 
 Tutorial: https://www.instructables.com/Raspberry-Pi-Indoor-Climate-Monitoring-and-Control/
 
@@ -29,6 +30,12 @@ $ pip install spidev
 $ pip install pyserial
 
 $ pip install requests
+
+sudo pip install mh-z19
+
+$ sudo apt-get install dash
+$ sudo apt-get install dash_bootstrap_components
+$ sudo apt-get install pandas
 ```
 
 ## Usage:
