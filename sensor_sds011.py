@@ -25,8 +25,6 @@ ser = serial.Serial()
 ser.port = "/dev/ttyUSB0"
 ser.baudrate = 9600
 
-ser.open()
-ser.flushInput()
 
 byte, data = 0, ""
 
@@ -85,7 +83,7 @@ def cmd_set_sleep(sleep):
     mode = 0 if sleep else 1
     ser.write(construct_command(CMD_SLEEP, [0x1, mode]))
     read_response()
-
+    
 def cmd_set_working_period(period):
     ser.write(construct_command(CMD_WORKING_PERIOD, [0x1, period]))
     read_response()
@@ -102,6 +100,8 @@ def cmd_set_id(id):
     read_response()
 
 def init_sensor():
+    ser.open()
+    ser.flushInput()
     cmd_set_sleep(0)
     cmd_firmware_ver()
     cmd_set_working_period(PERIOD_CONTINUOUS)

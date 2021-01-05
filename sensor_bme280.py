@@ -4,10 +4,10 @@ import logging
 
 port = 1
 address = 0x76
-bus = smbus2.SMBus(port)
 
 
 def get_sensor_data():
+    bus = smbus2.SMBus(port)
     try:
         calibration_params = bme280.load_calibration_params(bus, address)
 
